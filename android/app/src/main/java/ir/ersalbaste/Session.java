@@ -39,6 +39,19 @@ public final class Session {
     public boolean loggedIn() { return token() != null; }
     public boolean isDriver() { return "driver".equals(role()); }
 
+    // ---------- محدودیت نسخه‌ی نمایشی (Demo) ----------
+    // اپ روی هر گوشی فقط همین تعداد بار باز می‌شود؛ بعد از آن صفحه‌ی «پایان نسخه‌ی نمایشی» نشان داده می‌شود.
+    // برای تغییر تعداد، فقط همین عدد را عوض کنید (مثلاً برای تست خودتان روی ۵ بگذارید).
+    public static final int MAX_OPENS = 1;
+
+    /** یک بار در هر «باز شدن اپ» (اجرای فرایند) صدا زده می‌شود و شمارنده را یکی زیاد می‌کند. */
+    public void countOpen() {
+        p.edit().putInt("opens", p.getInt("opens", 0) + 1).apply();
+    }
+
+    /** آیا سقف دفعات باز شدن رد شده است؟ */
+    public boolean locked() { return p.getInt("opens", 0) > MAX_OPENS; }
+
     /** پاسخ سرور بعد از ورود/ثبت‌نام: {token, user:{name, phone, role}} */
     public void save(JSONObject res) {
         JSONObject u = res.optJSONObject("user");
