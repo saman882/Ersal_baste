@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>پنل سرور ارسال بسته</title>
+<style>
+  body{font-family:Vazirmatn,Tahoma,sans-serif;background:#f5f6f8;margin:0;padding:24px;color:#111}
+  h1{font-size:20px;margin:0 0 4px} p{color:#666;margin:0 0 16px;font-size:13px}
+  table{width:100%;border-collapse:collapse;background:#fff;border-radius:12px;overflow:hidden;font-size:14px}
+  th,td{padding:10px 12px;border-bottom:1px solid #eee;text-align:right}
+  th{background:#111;color:#fff;font-weight:500}
+  .s{padding:3px 10px;border-radius:20px;font-size:12px}
+  .pending{background:#fff4d6;color:#8a6100}.accepted{background:#dcf5e3;color:#1b6b34}
+  .rejected,.canceled{background:#fde2e2;color:#9b1c1c}
+</style>
+</head>
+<body>
+<h1>📦 پنل سرور ارسال بسته</h1>
+<p>این صفحه هر ۳ ثانیه به‌روز می‌شود. سفارش‌های در انتظار بعد از یک ساعت خودکار حذف می‌شوند.</p>
+<table><thead><tr><th>#</th><th>کاربر</th><th>فرستنده</th><th>گیرنده</th><th>وضعیت</th><th>راننده</th><th>زمان باقی‌مانده</th></tr></thead>
+<tbody id="rows"></tbody></table>
+<script>
+const label={pending:'در انتظار راننده',accepted:'تایید شد',rejected:'لغو توسط راننده',canceled:'لغو توسط کاربر'};
+async function load(){
+  const r=await fetch('/api/admin/orders'); const d=await r.json();
+  document.getElementById('rows').innerHTML=d.orders.map(o=>{
+    let left='—';
+    if(o.status==='pending'){const ms=d.ttl-(d.now-o.created_at);const m=Math.floor(ms/60000),s=Math.floor(ms%60000/1000);left=m+':'+String(s).padStart(2,'0');}
+    return `<tr><td>${o.id}</td><td>${esc(o.user_name)}</td><td>${esc(o.sender_name)}</td><td>${esc(o.receiver_name)}</td><td><span class="s ${o.status}">${label[o.status]}</span></td><td>${esc(o.driver_name||'—')}</td><td>${left}</td></tr>`;
+  }).join('')||'<tr><td colspan="7">هنوز سفارشی ثبت نشده</td></tr>';
+}
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+load(); setInterval(load,3000);
+</script>
+</body></html>

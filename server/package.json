@@ -1,0 +1,12 @@
+{
+  "name": "ersal-baste-server",
+  "version": "1.0.0",
+  "description": "سرور اپلیکیشن ارسال بسته (بدون وابستگی خارجی، Node.js 22+)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=22.5"
+  }
+}

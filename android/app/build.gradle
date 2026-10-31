@@ -1,0 +1,32 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'ir.ersalbaste'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'ir.ersalbaste'
+        minSdk 21
+        targetSdk 34
+        versionCode 1
+        versionName '1.0'
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            // برای پروژه‌ی دانشجویی با کلید debug امضا می‌شود تا مستقیم نصب شود
+            signingConfig signingConfigs.debug
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+}
+
+// عمداً هیچ کتابخانه‌ی خارجی استفاده نشده؛ فقط API خود اندروید.
+dependencies { }
