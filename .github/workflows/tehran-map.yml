@@ -1,0 +1,36 @@
+# ساخت فایل نقشه‌ی آفلاین تهران (PMTiles) از داده‌ی OpenStreetMap (ساخت روزانه‌ی Protomaps).
+# فقط محدوده‌ی تهران برش داده می‌شود و در Release با برچسب tehran-map قرار می‌گیرد.
+name: Tehran offline map
+on:
+  workflow_dispatch:
+    inputs:
+      maxzoom:
+        description: 'Max zoom of the extract'
+        default: '15'
+
+permissions:
+  contents: write
+
+jobs:
+  extract:
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install pmtiles CLI
+        run: |
+          gh release download -R protomaps/go-pmtiles -p '*Linux_x86_64.tar.gz' -O pmtiles.tgz
+          tar xzf pmtiles.tgz pmtiles && ./pmtiles version
+      - name: Extract Tehran from latest Protomaps build
+        run: |
+          KEY=$(curl -sf https://build-metadata.protomaps.dev/builds.json | jq -r 'sort_by(.key) | last | .key')
+          echo "Using build: $KEY"
+          ./pmtiles extract "https://build.protomaps.com/$KEY" tehran.pmtiles \
+            --bbox=51.05,35.55,51.65,35.85 --maxzoom=${{ inputs.maxzoom }}
+          ./pmtiles show tehran.pmtiles | head -40
+          ls -la tehran.pmtiles
+      - name: Publish as release asset
+        run: |
+          gh release delete tehran-map --yes --cleanup-tag 2>/dev/null || true
+          gh release create tehran-map tehran.pmtiles --title "Tehran offline map" --notes "OpenStreetMap data via Protomaps (ODbL)" --target "$GITHUB_SHA"
