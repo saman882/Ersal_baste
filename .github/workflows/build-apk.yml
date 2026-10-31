@@ -4,6 +4,9 @@ on:
   push:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-24.04
@@ -34,3 +37,11 @@ jobs:
         with:
           name: ersal-baste-apk
           path: ersal-baste.apk
+      - name: Publish APK as GitHub Release (latest)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd ..
+          gh release delete latest --yes --cleanup-tag 2>/dev/null || true
+          gh release create latest ersal-baste.apk --title "ارسال بسته - آخرین نسخه" \
+            --notes "فایل ersal-baste.apk را دانلود و روی گوشی نصب کنید." --target "$GITHUB_SHA"
