@@ -97,6 +97,7 @@ function requireUser(req, role) {
   if (role && user.role !== role) throw new HttpError(403, 'دسترسی مجاز نیست');
   return user;
 }
+const toEn = (s) => s.replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d)).replace(/[٠-٩]/g, (d) => '٠١٢٣٤٥٦٧٨٩'.indexOf(d));
 function text(v, field, required = true) {
   const s = (v ?? '').toString().trim();
   if (required && !s) throw new HttpError(400, `فیلد «${field}» خالی است`);
@@ -120,7 +121,7 @@ const route = (method, pattern, handler) => routes.push({ method, pattern, handl
 // ثبت‌نام (کاربر یا راننده)
 route('POST', /^\/api\/register$/, async (req) => {
   const b = await readJson(req);
-  const phone = text(b.phone, 'شماره موبایل');
+  const phone = toEn(text(b.phone, 'شماره موبایل'));
   const name = text(b.name, 'نام');
   const role = b.role === 'driver' ? 'driver' : 'user';
   const password = (b.password || '').toString();
@@ -137,7 +138,7 @@ route('POST', /^\/api\/register$/, async (req) => {
 // ورود با شماره و رمز (بدون پیامک)
 route('POST', /^\/api\/login$/, async (req) => {
   const b = await readJson(req);
-  const user = db.prepare(`SELECT * FROM users WHERE phone = ?`).get(text(b.phone, 'شماره موبایل'));
+  const user = db.prepare(`SELECT * FROM users WHERE phone = ?`).get(toEn(text(b.phone, 'شماره موبایل')));
   if (!user || !checkPassword((b.password || '').toString(), user)) throw new HttpError(401, 'شماره یا رمز عبور اشتباه است');
   return { token: newSession(user.id), user: { id: user.id, phone: user.phone, name: user.name, role: user.role } };
 });

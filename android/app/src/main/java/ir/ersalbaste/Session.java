@@ -11,7 +11,9 @@ import org.json.JSONObject;
  */
 public final class Session {
     private static final String PREF = "ersal_session";
-    public static final String DEFAULT_SERVER = "http://192.168.1.100:3000";
+    /** سرور آنلاین (Supabase). برای دمو روی لپ‌تاپ، در «تنظیمات سرور» آدرس محلی وارد شود. */
+    public static final String DEFAULT_SERVER = "https://qbmtrekzehzjtoanibfu.supabase.co/functions/v1";
+    private static final String OLD_DEFAULT = "http://192.168.1.100:3000";
 
     private final SharedPreferences p;
 
@@ -19,7 +21,10 @@ public final class Session {
         p = c.getSharedPreferences(PREF, Context.MODE_PRIVATE);
     }
 
-    public String server() { return p.getString("server", DEFAULT_SERVER); }
+    public String server() {
+        String s = p.getString("server", DEFAULT_SERVER);
+        return (s == null || s.isEmpty() || OLD_DEFAULT.equals(s)) ? DEFAULT_SERVER : s;
+    }
     public void setServer(String s) {
         s = s.trim();
         while (s.endsWith("/")) s = s.substring(0, s.length() - 1);

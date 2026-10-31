@@ -157,6 +157,9 @@ public class NewOrderActivity extends Activity {
         sheet.addView(b, Ui.matchWrap(this, 22));
         b.setOnClickListener(v -> {
             for (int i = 0; i < 5; i++) data[i] = fields[i].getText().toString().trim();
+            data[1] = Ui.toEn(data[1]);   // شماره همراه
+            data[3] = Ui.toEn(data[3]);   // پلاک
+            data[4] = Ui.toEn(data[4]);   // واحد
             if (data[0].isEmpty() || data[2].isEmpty()) { toast("نام و آدرس " + who + " را وارد کنید"); return; }
             if (!data[1].matches("0\\d{10}")) { toast("شماره همراه " + who + " باید ۱۱ رقم و با ۰ شروع شود"); return; }
             next.run();

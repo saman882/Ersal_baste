@@ -151,7 +151,7 @@ public class LoginActivity extends Activity {
         session.setServer(server.getText().toString().isEmpty() ? Session.DEFAULT_SERVER : server.getText().toString());
         JSONObject body = new JSONObject();
         try {
-            body.put("phone", phone.getText().toString().trim());
+            body.put("phone", Ui.toEn(phone.getText().toString()));
             body.put("password", password.getText().toString());
             if (registerMode) {
                 body.put("name", name.getText().toString().trim());

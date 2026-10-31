@@ -50,8 +50,8 @@ public final class Api {
             try {
                 con = (HttpURLConnection) new URL(base + path).openConnection();
                 con.setRequestMethod(method);
-                con.setConnectTimeout(8000);
-                con.setReadTimeout(10000);
+                con.setConnectTimeout(15000);
+                con.setReadTimeout(25000);
                 con.setRequestProperty("Accept", "application/json");
                 if (token != null) con.setRequestProperty("Authorization", "Bearer " + token);
                 if (body != null) {
@@ -68,9 +68,9 @@ public final class Api {
                 if (code < 400) result = json;
                 else error = json.optString("error", "خطای سرور (" + code + ")");
             } catch (java.net.SocketTimeoutException e) {
-                error = "سرور پاسخ نداد. آدرس سرور و اینترنت را بررسی کنید.";
+                error = "سرور پاسخ نداد. اینترنت گوشی را بررسی کنید و دوباره تلاش کنید.";
             } catch (java.io.IOException e) {
-                error = "اتصال به سرور برقرار نشد (" + base + ")";
+                error = "اتصال به سرور برقرار نشد. اینترنت را بررسی کنید.\n(" + base + ")";
             } catch (Exception e) {
                 error = "پاسخ نامعتبر از سرور";
             } finally {

@@ -156,6 +156,18 @@ public final class Ui {
         return new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, w);
     }
 
+    /** تبدیل ارقام فارسی و عربی به انگلیسی (کیبورد فارسی گوشی ارقام ۰-۹ فارسی تایپ می‌کند). */
+    public static String toEn(String s) {
+        if (s == null) return "";
+        StringBuilder b = new StringBuilder(s.length());
+        for (char ch : s.toCharArray()) {
+            if (ch >= '۰' && ch <= '۹') b.append((char) ('0' + ch - '۰'));
+            else if (ch >= '٠' && ch <= '٩') b.append((char) ('0' + ch - '٠'));
+            else b.append(ch);
+        }
+        return b.toString().trim();
+    }
+
     /** تبدیل میلی‌ثانیه‌ی باقی‌مانده به «دقیقه:ثانیه». */
     public static String mmss(long ms) {
         if (ms < 0) ms = 0;
