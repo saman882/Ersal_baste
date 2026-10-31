@@ -14,7 +14,10 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * نقشه‌ی تهران.
+ * نقشه‌ی آفلاین تهران.
+ *
+ * داده‌ی نقشه (فایل tehran.pmtiles، داده‌ی OpenStreetMap فقط برای محدوده‌ی تهران) داخل خود اپ است
+ * و با MapFileBridge خوانده می‌شود؛ پس نقشه به اینترنت یا هیچ API خارجی نیاز ندارد.
  *
  * نقشه یک صفحه‌ی HTML محلی است (assets/map/map.html) که با کتابخانه‌ی Leaflet کار می‌کند
  * و داخل یک WebView نمایش داده می‌شود. هیچ GPS یا مجوز موقعیتی لازم نیست؛
@@ -35,6 +38,8 @@ public class MapWebView extends WebView {
         WebSettings s = getSettings();
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
+        // پل جاوا ← جاوااسکریپت: صفحه‌ی نقشه بایت‌های فایل آفلاین تهران را از اینجا می‌خواند
+        addJavascriptInterface(new MapFileBridge(c.getApplicationContext()), "MapFile");
         setWebViewClient(new WebViewClient() {
             @Override
             public void onPageFinished(WebView view, String url) {

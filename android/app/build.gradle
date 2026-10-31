@@ -10,8 +10,8 @@ android {
         applicationId 'ir.ersalbaste'
         minSdk 21
         targetSdk 34
-        versionCode 2
-        versionName '1.1'
+        versionCode 3
+        versionName '1.2'
     }
 
     buildTypes {
@@ -20,6 +20,11 @@ android {
             // برای پروژه‌ی دانشجویی با کلید debug امضا می‌شود تا مستقیم نصب شود
             signingConfig signingConfigs.debug
         }
+    }
+
+    // فایل نقشه‌ی تهران فشرده نشود تا مستقیم از داخل APK خوانده شود (بدون کپی)
+    androidResources {
+        noCompress 'pmtiles'
     }
 
     compileOptions {

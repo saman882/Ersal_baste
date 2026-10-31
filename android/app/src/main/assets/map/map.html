@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <link rel="stylesheet" href="leaflet.css">
 <style>
-  html,body,#map{margin:0;height:100%;width:100%;background:#e8eaed}
+  html,body,#map{margin:0;height:100%;width:100%;background:#f2efe9}
   /* سنجاق ثابت وسط نقشه (مثل اسنپ و تپسی) */
   #pin{position:absolute;left:50%;top:50%;z-index:1000;pointer-events:none;display:none;
        transform:translate(-50%,-100%);transition:transform .15s}
@@ -19,6 +19,7 @@
   .mk{width:22px;height:22px;border-radius:50%;border:5px solid #1B9E4B;background:#fff;box-sizing:border-box;
       box-shadow:0 1px 4px rgba(0,0,0,.4)}
   .mk.dest{border-color:#D93025}
+  .leaflet-control-attribution{font-size:9px}
 </style>
 </head>
 <body>
@@ -26,19 +27,38 @@
 <div id="pin"><div class="head"></div><div class="stick"></div></div>
 <div id="shadow"></div>
 <script src="leaflet.js"></script>
+<script src="pmtiles.js"></script>
+<script src="protomaps-leaflet.js"></script>
 <script>
-  // محدوده‌ی تقریبی شهر تهران
-  var TEHRAN = L.latLngBounds([35.55, 51.05], [35.85, 51.65]);
-  var map = L.map('map', {zoomControl:false, attributionControl:true, maxBounds:TEHRAN.pad(0.2), minZoom:11, maxZoom:18})
-             .setView([35.7010, 51.3910], 13);
+  // ---------- نقشه‌ی آفلاین تهران ----------
+  // فایل tehran.pmtiles (داده‌ی OpenStreetMap، فقط محدوده‌ی تهران) داخل خود اپ است.
+  // جاوااسکریپت بایت‌های لازم را از طریق پل جاوا (window.MapFile.read) می‌خواند؛
+  // پس هیچ اینترنت، API یا کلیدی برای نقشه لازم نیست.
+  function b64ToBuffer(b64) {
+    var bin = atob(b64), out = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out.buffer;
+  }
+  var TehranSource = {
+    getKey: function () { return 'tehran.pmtiles'; },
+    getBytes: function (offset, length) {
+      return Promise.resolve({ data: b64ToBuffer(window.MapFile.read(offset, length)) });
+    }
+  };
 
-  // کاشی‌های نقشه از سرویس عمومی (نیاز به اینترنت)؛ در صورت خطا به OSM سوئیچ می‌کند
-  var primary = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
-      {subdomains:'abcd', attribution:'© OpenStreetMap © CARTO'});
-  var fallback = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {attribution:'© OpenStreetMap'});
-  var errors = 0;
-  primary.on('tileerror', function(){ if (++errors === 6) { map.removeLayer(primary); fallback.addTo(map); } });
-  primary.addTo(map);
+  // محدوده‌ی تهران (همان محدوده‌ای که فایل نقشه از آن برش داده شده)
+  var TEHRAN = L.latLngBounds([35.55, 51.05], [35.85, 51.65]);
+  var map = L.map('map', {zoomControl:false, maxBounds:TEHRAN, maxBoundsViscosity:1.0, minZoom:11, maxZoom:18})
+             .setView([35.7010, 51.3910], 13);
+  map.attributionControl.setPrefix(false);
+
+  protomapsL.leafletLayer({
+    url: new pmtiles.PMTiles(TehranSource),
+    flavor: 'light',
+    lang: 'fa',
+    maxDataZoom: 15,          // داده تا زوم ۱۵؛ زوم‌های بالاتر با بزرگ‌نمایی همان داده رسم می‌شوند
+    attribution: '© OpenStreetMap'
+  }).addTo(map);
 
   var pin = document.getElementById('pin'), shadow = document.getElementById('shadow');
   map.on('movestart', function(){ pin.classList.add('lift'); });
