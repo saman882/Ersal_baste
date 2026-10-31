@@ -14,11 +14,21 @@ android {
         versionName '1.2'
     }
 
+    // کلید امضای ثابت: همه‌ی نسخه‌ها با یک کلید امضا می‌شوند تا نسخه‌ی جدید روی قبلی نصب شود.
+    // (برای پروژه‌ی دانشجویی رمز داخل کد است؛ در اپ واقعی باید در GitHub Secrets باشد.)
+    signingConfigs {
+        release {
+            storeFile rootProject.file('ersal-baste.jks')
+            storePassword 'ersalbaste123'
+            keyAlias 'ersalbaste'
+            keyPassword 'ersalbaste123'
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled false
-            // برای پروژه‌ی دانشجویی با کلید debug امضا می‌شود تا مستقیم نصب شود
-            signingConfig signingConfigs.debug
+            signingConfig signingConfigs.release
         }
     }
 
