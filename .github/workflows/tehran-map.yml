@@ -6,7 +6,7 @@ on:
     inputs:
       maxzoom:
         description: 'Max zoom of the extract'
-        default: '15'
+        default: '14'
 
 permissions:
   contents: write
