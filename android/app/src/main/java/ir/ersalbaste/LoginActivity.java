@@ -26,8 +26,8 @@ public class LoginActivity extends Activity {
     private String role = "user";
 
     private TextView tabLogin, tabRegister, roleUser, roleDriver, title;
-    private LinearLayout registerBox, serverBox;
-    private EditText phone, password, name, server;
+    private LinearLayout registerBox, serverBox, driverCodeBox;
+    private EditText phone, password, name, server, driverCode;
     private Button submit;
 
     @Override
@@ -91,6 +91,12 @@ public class LoginActivity extends Activity {
         roleUser.setOnClickListener(v -> setRole("user"));
         roleDriver.setOnClickListener(v -> setRole("driver"));
         name = Ui.field(this, registerBox, "نام و نام خانوادگی", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PERSON_NAME);
+        // فقط برای راننده: کد ۱۰ رقمی ثبت‌نام (بدون آن، سرور ثبت‌نام راننده را رد می‌کند)
+        driverCodeBox = Ui.vbox(this);
+        registerBox.addView(driverCodeBox, Ui.matchWrap());
+        driverCode = Ui.field(this, driverCodeBox, "کد ۱۰ رقمی ثبت‌نام راننده", InputType.TYPE_CLASS_NUMBER);
+        driverCode.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(10)});
+        driverCode.setTextDirection(View.TEXT_DIRECTION_LTR);
 
         phone = Ui.field(this, card, "شماره موبایل", InputType.TYPE_CLASS_PHONE);
         phone.setHint("مثلاً 09121234567");
@@ -145,6 +151,7 @@ public class LoginActivity extends Activity {
         role = r;
         select(roleUser, "user".equals(r));
         select(roleDriver, "driver".equals(r));
+        driverCodeBox.setVisibility("driver".equals(r) ? View.VISIBLE : View.GONE);
     }
 
     private void submit() {
@@ -156,6 +163,14 @@ public class LoginActivity extends Activity {
             if (registerMode) {
                 body.put("name", name.getText().toString().trim());
                 body.put("role", role);
+                if ("driver".equals(role)) {
+                    String code = Ui.toEn(driverCode.getText().toString());
+                    if (!code.matches("\\d{10}")) {
+                        Toast.makeText(this, "کد ثبت‌نام راننده باید ۱۰ رقم باشد", Toast.LENGTH_LONG).show();
+                        return;
+                    }
+                    body.put("driver_code", code);
+                }
             }
         } catch (Exception ignored) { }
 

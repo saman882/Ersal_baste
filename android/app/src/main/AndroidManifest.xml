@@ -6,7 +6,6 @@
     <uses-permission android:name="android.permission.VIBRATE" />
 
     <application
-        android:name=".App"
         android:label="ارسال بسته"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher"
@@ -26,6 +25,6 @@
         <activity android:name=".HomeActivity" />
         <activity android:name=".NewOrderActivity" android:windowSoftInputMode="adjustResize" />
         <activity android:name=".DriverActivity" />
-        <activity android:name=".LockActivity" />
+        <activity android:name=".AdminActivity" />
     </application>
 </manifest>

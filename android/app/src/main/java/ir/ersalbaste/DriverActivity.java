@@ -83,6 +83,14 @@ public class DriverActivity extends Activity {
         exit.setBackground(Ui.round(this, 0xFF333333, 16, 0));
         exit.setPadding(Ui.dp(this, 14), Ui.dp(this, 6), Ui.dp(this, 14), Ui.dp(this, 6));
         exit.setOnClickListener(v -> HomeActivity.logout(this, session));
+        // بخش کوچک «مدیریت»: با کد ۱۰ رقمی، تاریخچه‌ی کامل سفرها و اطلاعات رانندگان
+        TextView admin = Ui.text(this, "مدیریت", 13, true, Ui.WHITE);
+        admin.setBackground(Ui.round(this, 0xFF333333, 16, 0));
+        admin.setPadding(Ui.dp(this, 14), Ui.dp(this, 6), Ui.dp(this, 14), Ui.dp(this, 6));
+        admin.setOnClickListener(v -> askAdminCode());
+        top.addView(admin);
+        View sp = new View(this);
+        top.addView(sp, new LinearLayout.LayoutParams(Ui.dp(this, 8), 1));
         top.addView(exit);
         root.addView(top, Ui.matchWrap());
 
@@ -93,7 +101,7 @@ public class DriverActivity extends Activity {
         col.addView(Ui.text(this, "سلام " + session.name() + "، سفارش‌های جدید:", 16, true, Ui.BLACK));
         pendingList = Ui.vbox(this);
         col.addView(pendingList, Ui.matchWrap());
-        col.addView(Ui.text(this, "سفارش‌های تایید شده‌ی من", 16, true, Ui.BLACK), Ui.matchWrap(this, 26));
+        col.addView(Ui.text(this, "سفارش‌های من (در حال ارسال و تحویل‌شده)", 16, true, Ui.BLACK), Ui.matchWrap(this, 26));
         acceptedList = Ui.vbox(this);
         col.addView(acceptedList, Ui.matchWrap());
         root.addView(sv, new LinearLayout.LayoutParams(-1, 0, 1));
@@ -181,7 +189,8 @@ public class DriverActivity extends Activity {
             cd.card = c;
             countdowns.add(cd);
         } else {
-            top.addView(Ui.chip(this, "تایید شده", Ui.GREEN));
+            String st = o.optString("status");
+            top.addView(Ui.chip(this, "delivered".equals(st) ? "تحویل داده شد" : "در حال ارسال", Ui.statusColor(st)));
         }
         c.addView(top);
         c.addView(Ui.text(this, "🟢 مبدا: " + o.optString("sender_address") + extra(o, "sender"), 13, false, Ui.BLACK), Ui.matchWrap(this, 8));
@@ -210,6 +219,16 @@ public class DriverActivity extends Activity {
                     .setMessage("این سفارش لغو شود؟")
                     .setPositiveButton("بله، لغو شود", (d, w) -> decide(o.optInt("id"), "reject"))
                     .setNegativeButton("خیر", null).show());
+        } else if ("accepted".equals(o.optString("status"))) {
+            // بعد از قبول سفارش: دکمه‌ی «تحویل داده شد»
+            Button deliver = Ui.button(this, "✅  تحویل داده شد", Ui.BLUE, Ui.WHITE, 0);
+            c.addView(deliver, Ui.matchWrap(this, 10));
+            deliver.setOnClickListener(v -> new AlertDialog.Builder(this)
+                    .setMessage("بسته‌ی سفارش #" + o.optInt("id") + " به گیرنده تحویل داده شد؟")
+                    .setPositiveButton("بله، تحویل شد", (d, w) -> decide(o.optInt("id"), "deliver"))
+                    .setNegativeButton("خیر", null).show());
+        } else if ("delivered".equals(o.optString("status"))) {
+            c.addView(Ui.text(this, "زمان تحویل: " + Ui.date(o.optLong("delivered_at")), 12, false, Ui.GRAY), Ui.matchWrap(this, 6));
         }
         return c;
     }
@@ -223,7 +242,8 @@ public class DriverActivity extends Activity {
 
     private void decide(int id, String action) {
         api.post("/api/driver/orders/" + id + "/" + action, new JSONObject(), (res, err) -> {
-            Toast.makeText(this, err != null ? err : ("accept".equals(action) ? "سفارش تایید شد ✅" : "سفارش لغو شد"), Toast.LENGTH_SHORT).show();
+            String ok = "accept".equals(action) ? "سفارش تایید شد ✅" : "deliver".equals(action) ? "تحویل بسته ثبت شد 📦" : "سفارش لغو شد";
+            Toast.makeText(this, err != null ? err : ok, Toast.LENGTH_SHORT).show();
             load();
         });
     }
@@ -240,6 +260,25 @@ public class DriverActivity extends Activity {
                 cd.label.setTextColor(left < 5 * 60000 ? Ui.RED : Ui.AMBER);
             }
         }
+    }
+
+    /** پرسیدن کد ۱۰ رقمی مدیریت؛ بررسی اصلی کد در سرور انجام می‌شود. */
+    private void askAdminCode() {
+        LinearLayout box = Ui.vbox(this);
+        int p = Ui.dp(this, 20);
+        box.setPadding(p, Ui.dp(this, 8), p, 0);
+        final android.widget.EditText code = Ui.field(this, box, "کد ۱۰ رقمی مدیریت", android.text.InputType.TYPE_CLASS_NUMBER | android.text.InputType.TYPE_NUMBER_VARIATION_PASSWORD);
+        code.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(10)});
+        code.setTextDirection(View.TEXT_DIRECTION_LTR);
+        new AlertDialog.Builder(this)
+                .setTitle("ورود به مدیریت")
+                .setView(box)
+                .setPositiveButton("ورود", (d, w) -> {
+                    String c = Ui.toEn(code.getText().toString());
+                    if (!c.matches("\\d{10}")) { Toast.makeText(this, "کد باید ۱۰ رقم باشد", Toast.LENGTH_SHORT).show(); return; }
+                    startActivity(new android.content.Intent(this, AdminActivity.class).putExtra(AdminActivity.EXTRA_CODE, c));
+                })
+                .setNegativeButton("انصراف", null).show();
     }
 
     private void showMap(JSONObject o) {

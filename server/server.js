@@ -36,7 +36,7 @@ db.exec(`
     user_id          INTEGER NOT NULL REFERENCES users(id),
     driver_id        INTEGER REFERENCES users(id),
     status           TEXT NOT NULL DEFAULT 'pending'
-                     CHECK (status IN ('pending','accepted','rejected','canceled')),
+                     CHECK (status IN ('pending','accepted','delivered','rejected','canceled')),
     origin_lat REAL NOT NULL, origin_lng REAL NOT NULL,
     dest_lat   REAL NOT NULL, dest_lng   REAL NOT NULL,
     sender_name TEXT NOT NULL, sender_phone TEXT NOT NULL, sender_address TEXT NOT NULL,
@@ -45,10 +45,45 @@ db.exec(`
     receiver_plaque TEXT, receiver_unit TEXT,
     note        TEXT,
     created_at  INTEGER NOT NULL,
-    decided_at  INTEGER
+    decided_at  INTEGER,
+    delivered_at INTEGER
   );
   CREATE INDEX IF NOT EXISTS idx_orders_status_created ON orders(status, created_at);
 `);
+
+// مهاجرت پایگاه داده‌ی قدیمی: اضافه کردن وضعیت delivered و ستون delivered_at
+{
+  const def = db.prepare(`SELECT sql FROM sqlite_master WHERE type='table' AND name='orders'`).get();
+  if (def && !def.sql.includes("'delivered'")) {
+    const cols = db.prepare(`PRAGMA table_info(orders)`).all().map((c) => c.name).join(', ');
+    const newSql = def.sql
+      .replace("'pending','accepted','rejected','canceled'", "'pending','accepted','delivered','rejected','canceled'")
+      .replace(/decided_at\s+INTEGER\s*\)\s*$/, 'decided_at INTEGER, delivered_at INTEGER)')
+      .replace('CREATE TABLE orders', 'CREATE TABLE orders_new');
+    db.exec(`BEGIN; ${newSql}; INSERT INTO orders_new (${cols}) SELECT ${cols} FROM orders;
+             DROP TABLE orders; ALTER TABLE orders_new RENAME TO orders;
+             CREATE INDEX IF NOT EXISTS idx_orders_status_created ON orders(status, created_at); COMMIT;`);
+    console.log('[migrate] جدول orders به‌روز شد');
+  }
+}
+
+// ---------- کدهای ۱۰ رقمی (ثبت‌نام راننده و مدیریت) ----------
+// کدها داخل کد برنامه و GitHub نیستند. از متغیرهای محیطی DRIVER_CODE و ADMIN_CODE
+// یا فایل codes.json کنار همین فایل خوانده می‌شوند (این فایل در .gitignore است).
+const CODES = (() => {
+  let file = {};
+  try { file = JSON.parse(fs.readFileSync(path.join(__dirname, 'codes.json'), 'utf8')); } catch { }
+  return { driver: process.env.DRIVER_CODE || file.driver_code || '', admin: process.env.ADMIN_CODE || file.admin_code || '' };
+})();
+if (!CODES.driver || !CODES.admin)
+  console.warn('[هشدار] codes.json پیدا نشد: ثبت‌نام راننده و بخش مدیریت غیرفعال است');
+async function checkCode(kind, code) {
+  const c = toEn(String(code ?? '')).trim(), real = CODES[kind];
+  const ok = /^\d{10}$/.test(c) && real.length === 10 &&
+    crypto.timingSafeEqual(Buffer.from(c), Buffer.from(real));
+  if (!ok) await new Promise((r) => setTimeout(r, 1000)); // کند کردن حدس زدن کد
+  return ok;
+}
 
 // ---------- ۲) رمز عبور: هش با scrypt + نمک تصادفی ----------
 function hashPassword(password, salt = crypto.randomBytes(16).toString('hex')) {
@@ -74,7 +109,7 @@ function send(res, status, data) {
   res.writeHead(status, {
     'Content-Type': 'application/json; charset=utf-8',
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Admin-Code',
   });
   res.end(body);
 }
@@ -127,6 +162,9 @@ route('POST', /^\/api\/register$/, async (req) => {
   const password = (b.password || '').toString();
   if (!/^09\d{9}$/.test(phone)) throw new HttpError(400, 'شماره موبایل باید ۱۱ رقم و با 09 شروع شود');
   if (password.length < 4) throw new HttpError(400, 'رمز عبور حداقل ۴ کاراکتر باشد');
+  // ثبت‌نام راننده فقط با کد ۱۰ رقمی معتبر
+  if (role === 'driver' && !(await checkCode('driver', b.driver_code)))
+    throw new HttpError(403, 'کد ثبت‌نام راننده نامعتبر است');
   if (db.prepare(`SELECT 1 FROM users WHERE phone = ?`).get(phone)) throw new HttpError(409, 'این شماره قبلاً ثبت شده است');
   const { hash, salt } = hashPassword(password);
   const r = db.prepare(`INSERT INTO users (phone, name, role, pass_hash, pass_salt, created_at) VALUES (?,?,?,?,?,?)`)
@@ -175,7 +213,9 @@ route('POST', /^\/api\/orders$/, async (req) => {
 route('GET', /^\/api\/orders\/mine$/, async (req) => {
   const u = requireUser(req, 'user');
   deleteExpired();
-  const rows = db.prepare(`SELECT o.*, d.name AS driver_name, d.phone AS driver_phone
+  // بعد از تحویل بسته، شماره‌ی راننده دیگر به کاربر نشان داده نمی‌شود
+  const rows = db.prepare(`SELECT o.*, d.name AS driver_name,
+      CASE WHEN o.status = 'delivered' THEN NULL ELSE d.phone END AS driver_phone
       FROM orders o LEFT JOIN users d ON d.id = o.driver_id
       WHERE o.user_id = ? ORDER BY o.id DESC LIMIT 100`).all(u.id);
   return { now: Date.now(), ttl: ORDER_TTL_MS, orders: rows };
@@ -195,7 +235,7 @@ route('GET', /^\/api\/driver\/orders$/, async (req) => {
   const d = requireUser(req, 'driver');
   deleteExpired();
   const pending = db.prepare(`SELECT * FROM orders WHERE status='pending' ORDER BY id DESC`).all();
-  const mine = db.prepare(`SELECT * FROM orders WHERE driver_id=? AND status='accepted' ORDER BY decided_at DESC LIMIT 50`).all(d.id);
+  const mine = db.prepare(`SELECT * FROM orders WHERE driver_id=? AND status IN ('accepted','delivered') ORDER BY decided_at DESC LIMIT 50`).all(d.id);
   return { now: Date.now(), ttl: ORDER_TTL_MS, pending, mine };
 });
 
@@ -213,19 +253,47 @@ function decide(newStatus) {
 route('POST', /^\/api\/driver\/orders\/(\d+)\/accept$/, decide('accepted'));
 route('POST', /^\/api\/driver\/orders\/(\d+)\/reject$/, decide('rejected'));
 
+// راننده: «تحویل داده شد» — فقط راننده‌ای که سفارش را قبول کرده، و فقط از وضعیت accepted
+route('POST', /^\/api\/driver\/orders\/(\d+)\/deliver$/, async (req, m) => {
+  const d = requireUser(req, 'driver');
+  const r = db.prepare(`UPDATE orders SET status='delivered', delivered_at=? WHERE id=? AND driver_id=? AND status='accepted'`)
+              .run(Date.now(), Number(m[1]), d.id);
+  if (!r.changes) throw new HttpError(409, 'این سفارش قابل ثبت به عنوان تحویل‌شده نیست');
+  return { ok: true };
+});
+
+// مدیریت: تاریخچه‌ی کامل سفرها + اطلاعات کامل رانندگان (ورود راننده + کد ۱۰ رقمی مدیریت)
+function adminHistory() {
+  deleteExpired();
+  const orders = db.prepare(`SELECT o.*, u.name AS user_name, u.phone AS user_phone, d.name AS driver_name, d.phone AS driver_phone
+      FROM orders o JOIN users u ON u.id=o.user_id LEFT JOIN users d ON d.id=o.driver_id ORDER BY o.id DESC LIMIT 500`).all();
+  const drivers = db.prepare(`SELECT u.id, u.name, u.phone, u.created_at,
+      SUM(o.status='accepted') AS accepted, SUM(o.status='delivered') AS delivered, SUM(o.status='rejected') AS rejected
+      FROM users u LEFT JOIN orders o ON o.driver_id=u.id WHERE u.role='driver' GROUP BY u.id ORDER BY u.id`).all()
+      .map((d) => ({ ...d, accepted: d.accepted || 0, delivered: d.delivered || 0, rejected: d.rejected || 0 }));
+  return { now: Date.now(), orders, drivers };
+}
+route('POST', /^\/api\/admin\/history$/, async (req) => {
+  requireUser(req, 'driver');
+  const b = await readJson(req);
+  if (!(await checkCode('admin', b.code))) throw new HttpError(403, 'کد مدیریت اشتباه است');
+  return adminHistory();
+});
+// پنل وب لپ‌تاپ: فقط با کد مدیریت (در هدر X-Admin-Code)
+route('GET', /^\/api\/admin\/orders$/, async (req) => {
+  if (!(await checkCode('admin', req.headers['x-admin-code']))) throw new HttpError(403, 'کد مدیریت اشتباه است');
+  return { ...adminHistory(), ttl: ORDER_TTL_MS };
+});
+
 route('GET', /^\/api\/health$/, async () => ({ ok: true, now: Date.now() }));
 
 // ---------- ۵) راه‌اندازی سرور ----------
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
-  if (req.method === 'OPTIONS') return send(res, 204, {});
+  if (req.method === 'OPTIONS') return send(res, 200, {});
   if (req.method === 'GET' && url.pathname === '/') {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     return res.end(fs.readFileSync(path.join(__dirname, 'dashboard.html')));
-  }
-  if (req.method === 'GET' && url.pathname === '/api/admin/orders') {
-    deleteExpired();
-    return send(res, 200, { now: Date.now(), ttl: ORDER_TTL_MS, orders: db.prepare(`SELECT o.id, o.status, o.sender_name, o.receiver_name, o.created_at, u.name AS user_name, d.name AS driver_name FROM orders o JOIN users u ON u.id=o.user_id LEFT JOIN users d ON d.id=o.driver_id ORDER BY o.id DESC LIMIT 100`).all() });
   }
   for (const r of routes) {
     const m = req.method === r.method && url.pathname.match(r.pattern);

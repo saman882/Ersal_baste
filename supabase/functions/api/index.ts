@@ -57,6 +57,18 @@ function safeEqual(a: string, b: string) {
   return r === 0;
 }
 
+// ---------- کدهای ۱۰ رقمی (ثبت‌نام راننده و مدیریت) ----------
+// خود کدها هیچ‌جا ذخیره نشده‌اند؛ فقط هش SHA-256 آن‌ها در جدول قفل‌شده‌ی app_config است.
+async function checkCode(kind: "driver" | "admin", code: unknown) {
+  const c = toEn(String(code ?? "")).trim();
+  if (!/^\d{10}$/.test(c)) return false;
+  const digest = hex(await crypto.subtle.digest("SHA-256", new TextEncoder().encode("ersal-baste:" + c)));
+  const { data } = await db.from("app_config").select("value").eq("key", `${kind}_code_sha256`).maybeSingle();
+  const ok = !!data && safeEqual(digest, data.value);
+  if (!ok) await new Promise((r) => setTimeout(r, 1000)); // کند کردن حدس زدن کد
+  return ok;
+}
+
 async function newSession(userId: number) {
   const token = hex(crypto.getRandomValues(new Uint8Array(32)));
   const { error } = await db.from("sessions").insert({ token, user_id: userId, created_at: Date.now() });
@@ -98,6 +110,9 @@ async function handle(req: Request): Promise<unknown> {
     const password = String(b.password || "");
     if (!/^09\d{9}$/.test(phone)) throw new HttpError(400, "شماره موبایل باید ۱۱ رقم و با 09 شروع شود");
     if (password.length < 4) throw new HttpError(400, "رمز عبور حداقل ۴ کاراکتر باشد");
+    // ثبت‌نام راننده فقط با کد ۱۰ رقمی معتبر
+    if (role === "driver" && !(await checkCode("driver", b.driver_code)))
+      throw new HttpError(403, "کد ثبت‌نام راننده نامعتبر است");
     const { hash, salt } = await hashPassword(password);
     const { data, error } = await db.from("users")
       .insert({ phone, name, role, pass_hash: hash, pass_salt: salt, created_at: Date.now() })
@@ -151,8 +166,13 @@ async function handle(req: Request): Promise<unknown> {
     const { data, error } = await db.from("orders").select("*, driver:users!orders_driver_id_fkey(name, phone)")
       .eq("user_id", u.id).order("id", { ascending: false }).limit(100);
     if (error) throw error;
+    // بعد از تحویل بسته، شماره‌ی راننده دیگر به کاربر نشان داده نمی‌شود
     // deno-lint-ignore no-explicit-any
-    const orders = (data || []).map(({ driver, ...o }: any) => ({ ...o, driver_name: driver?.name ?? null, driver_phone: driver?.phone ?? null }));
+    const orders = (data || []).map(({ driver, ...o }: any) => ({
+      ...o,
+      driver_name: driver?.name ?? null,
+      driver_phone: o.status === "delivered" ? null : (driver?.phone ?? null),
+    }));
     return { now: Date.now(), ttl: ORDER_TTL_MS, orders };
   }
 
@@ -170,7 +190,7 @@ async function handle(req: Request): Promise<unknown> {
     await deleteExpired();
     const [p, mine] = await Promise.all([
       db.from("orders").select("*").eq("status", "pending").order("id", { ascending: false }),
-      db.from("orders").select("*").eq("driver_id", d.id).eq("status", "accepted").order("decided_at", { ascending: false }).limit(50),
+      db.from("orders").select("*").eq("driver_id", d.id).in("status", ["accepted", "delivered"]).order("decided_at", { ascending: false }).limit(50),
     ]);
     if (p.error) throw p.error;
     return { now: Date.now(), ttl: ORDER_TTL_MS, pending: p.data, mine: mine.data || [] };
@@ -188,12 +208,42 @@ async function handle(req: Request): Promise<unknown> {
     return { ok: true };
   }
 
-  if (m === "GET" && path === "/api/admin/orders") {
+  // راننده: «تحویل داده شد» — فقط راننده‌ای که سفارش را قبول کرده، و فقط از وضعیت accepted
+  mm = path.match(/^\/api\/driver\/orders\/(\d+)\/deliver$/);
+  if (m === "POST" && mm) {
+    const d = await requireUser(req, "driver");
+    const { data } = await db.from("orders").update({ status: "delivered", delivered_at: Date.now() })
+      .eq("id", Number(mm[1])).eq("driver_id", d.id).eq("status", "accepted").select("id");
+    if (!data?.length) throw new HttpError(409, "این سفارش قابل ثبت به عنوان تحویل‌شده نیست");
+    return { ok: true };
+  }
+
+  // مدیریت: تاریخچه‌ی کامل سفرها + اطلاعات کامل رانندگان (نیاز به ورود راننده + کد ۱۰ رقمی مدیریت)
+  if (m === "POST" && path === "/api/admin/history") {
+    await requireUser(req, "driver");
+    const b = await body(req);
+    if (!(await checkCode("admin", b.code))) throw new HttpError(403, "کد مدیریت اشتباه است");
     await deleteExpired();
-    const { data } = await db.from("orders")
-      .select("id, status, sender_name, receiver_name, created_at, user:users!orders_user_id_fkey(name), driver:users!orders_driver_id_fkey(name)")
-      .order("id", { ascending: false }).limit(100);
-    return { now: Date.now(), ttl: ORDER_TTL_MS, orders: data };
+    const [o, dr] = await Promise.all([
+      db.from("orders")
+        .select("*, user:users!orders_user_id_fkey(name, phone), driver:users!orders_driver_id_fkey(id, name, phone)")
+        .order("id", { ascending: false }).limit(500),
+      db.from("users").select("id, name, phone, created_at").eq("role", "driver").order("id"),
+    ]);
+    if (o.error) throw o.error;
+    // deno-lint-ignore no-explicit-any
+    const orders = (o.data || []).map(({ user, driver, ...r }: any) => ({
+      ...r, user_name: user?.name ?? null, user_phone: user?.phone ?? null,
+      driver_name: driver?.name ?? null, driver_phone: driver?.phone ?? null,
+    }));
+    // deno-lint-ignore no-explicit-any
+    const drivers = (dr.data || []).map((d: any) => ({
+      ...d,
+      accepted: orders.filter((x) => x.driver_id === d.id && x.status === "accepted").length,
+      delivered: orders.filter((x) => x.driver_id === d.id && x.status === "delivered").length,
+      rejected: orders.filter((x) => x.driver_id === d.id && x.status === "rejected").length,
+    }));
+    return { now: Date.now(), orders, drivers };
   }
 
   throw new HttpError(404, "مسیر پیدا نشد");

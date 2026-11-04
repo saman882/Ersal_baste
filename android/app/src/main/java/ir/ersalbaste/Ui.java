@@ -179,6 +179,7 @@ public final class Ui {
         switch (status) {
             case "pending": return "در انتظار تایید راننده";
             case "accepted": return "تایید شد";
+            case "delivered": return "تحویل داده شد";
             case "rejected": return "لغو توسط راننده";
             case "canceled": return "لغو توسط شما";
             default: return status;
@@ -189,7 +190,24 @@ public final class Ui {
         switch (status) {
             case "pending": return AMBER;
             case "accepted": return GREEN;
+            case "delivered": return BLUE;
             default: return RED;
         }
+    }
+
+    /** زمان (میلی‌ثانیه) به تاریخ شمسی، مثل «۱۴۰۵/۰۸/۱۳ ۰۹:۵۰». روی اندروید ۷ به پایین تاریخ میلادی. */
+    public static String date(long ms) {
+        if (ms <= 0) return "—";
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= 24) {
+                android.icu.text.SimpleDateFormat f = new android.icu.text.SimpleDateFormat(
+                        "yyyy/MM/dd HH:mm", new android.icu.util.ULocale("fa_IR@calendar=persian"));
+                f.setTimeZone(android.icu.util.TimeZone.getTimeZone("Asia/Tehran"));
+                return f.format(new java.util.Date(ms));
+            }
+        } catch (Exception ignored) { }
+        java.text.SimpleDateFormat g = new java.text.SimpleDateFormat("yyyy/MM/dd HH:mm", java.util.Locale.US);
+        g.setTimeZone(java.util.TimeZone.getTimeZone("Asia/Tehran"));
+        return g.format(new java.util.Date(ms));
     }
 }

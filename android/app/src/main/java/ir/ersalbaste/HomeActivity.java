@@ -230,6 +230,10 @@ public class HomeActivity extends Activity {
                     .setNegativeButton("خیر", null).show());
         } else if ("accepted".equals(status)) {
             c.addView(Ui.text(this, "🛵 راننده: " + o.optString("driver_name") + " — " + o.optString("driver_phone"), 13, true, Ui.GREEN), Ui.matchWrap(this, 6));
+        } else if ("delivered".equals(status)) {
+            // بعد از تحویل، سرور شماره‌ی راننده را نمی‌فرستد؛ فقط نام او نمایش داده می‌شود
+            c.addView(Ui.text(this, "✅ بسته تحویل داده شد — راننده: " + o.optString("driver_name"), 13, true, Ui.BLUE), Ui.matchWrap(this, 6));
+            c.addView(Ui.text(this, "زمان تحویل: " + Ui.date(o.optLong("delivered_at")), 12, false, Ui.GRAY), Ui.matchWrap(this, 2));
         }
         return c;
     }

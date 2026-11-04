@@ -11,7 +11,7 @@
   th{background:#111;color:#fff;font-weight:500}
   .s{padding:3px 10px;border-radius:20px;font-size:12px}
   .pending{background:#fff4d6;color:#8a6100}.accepted{background:#dcf5e3;color:#1b6b34}
-  .rejected,.canceled{background:#fde2e2;color:#9b1c1c}
+  .delivered{background:#dde8fb;color:#1e4fa3}.rejected,.canceled{background:#fde2e2;color:#9b1c1c}
 </style>
 </head>
 <body>
@@ -20,9 +20,12 @@
 <table><thead><tr><th>#</th><th>کاربر</th><th>فرستنده</th><th>گیرنده</th><th>وضعیت</th><th>راننده</th><th>زمان باقی‌مانده</th></tr></thead>
 <tbody id="rows"></tbody></table>
 <script>
-const label={pending:'در انتظار راننده',accepted:'تایید شد',rejected:'لغو توسط راننده',canceled:'لغو توسط کاربر'};
+const label={pending:'در انتظار راننده',accepted:'تایید شد',delivered:'تحویل داده شد',rejected:'لغو توسط راننده',canceled:'لغو توسط کاربر'};
+let code=sessionStorage.getItem('adminCode')||'';
 async function load(){
-  const r=await fetch('/api/admin/orders'); const d=await r.json();
+  if(!code){code=(prompt('کد ۱۰ رقمی مدیریت را وارد کنید')||'').trim(); sessionStorage.setItem('adminCode',code);}
+  const r=await fetch('/api/admin/orders',{headers:{'X-Admin-Code':code}}); const d=await r.json();
+  if(!r.ok){document.getElementById('rows').innerHTML='<tr><td colspan="7">'+esc(d.error||'خطا')+'</td></tr>';code='';sessionStorage.removeItem('adminCode');return;}
   document.getElementById('rows').innerHTML=d.orders.map(o=>{
     let left='—';
     if(o.status==='pending'){const ms=d.ttl-(d.now-o.created_at);const m=Math.floor(ms/60000),s=Math.floor(ms%60000/1000);left=m+':'+String(s).padStart(2,'0');}
