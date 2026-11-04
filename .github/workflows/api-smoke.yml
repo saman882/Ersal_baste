@@ -1,0 +1,37 @@
+# تست سریع سرور آنلاین (بدون هیچ کد محرمانه‌ای): فقط مسیرهایی که به کدها نیاز ندارند
+name: API smoke test
+on:
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Run checks
+        run: |
+          B=https://qbmtrekzehzjtoanibfu.supabase.co/functions/v1
+          J='Content-Type: application/json'
+          fail=0
+          check() { if echo "$2" | grep -q "$3"; then echo "PASS  $1"; else echo "FAIL  $1 -> $2"; fail=1; fi; }
+          R=$(curl -s -XPOST $B/api/register -H "$J" -d '{"phone":"09000000001","name":"x","password":"1234","role":"driver"}')
+          check "driver signup without code rejected" "$R" "کد ثبت‌نام راننده نامعتبر"
+          R=$(curl -s -XPOST $B/api/register -H "$J" -d '{"phone":"09000000001","name":"x","password":"1234","role":"driver","driver_code":"0000000000"}')
+          check "driver signup with wrong code rejected" "$R" "کد ثبت‌نام راننده نامعتبر"
+          U=$(curl -s -XPOST $B/api/login -H "$J" -d '{"phone":"09191356747","password":"1234"}' | jq -r .token)
+          D=$(curl -s -XPOST $B/api/login -H "$J" -d '{"phone":"09381356747","password":"1234"}' | jq -r .token)
+          check "test user login" "$U" "^[0-9a-f]\{64\}$"
+          check "test driver login (existing account)" "$D" "^[0-9a-f]\{64\}$"
+          ID=$(curl -s -XPOST $B/api/orders -H "$J" -H "Authorization: Bearer $U" -d '{"origin_lat":35.7,"origin_lng":51.39,"dest_lat":35.75,"dest_lng":51.41,"sender":{"name":"تست خودکار","phone":"09191356747","address":"تست"},"receiver":{"name":"تست خودکار","phone":"09191356747","address":"تست"},"note":"تست خودکار سرور"}' | jq -r .id)
+          check "create order" "$ID" "^[0-9]\+$"
+          R=$(curl -s -XPOST $B/api/driver/orders/$ID/deliver -H "Authorization: Bearer $D"); check "deliver before accept rejected" "$R" "قابل ثبت"
+          R=$(curl -s -XPOST $B/api/driver/orders/$ID/accept -H "Authorization: Bearer $D"); check "accept" "$R" '"ok":true'
+          R=$(curl -s $B/api/orders/mine -H "Authorization: Bearer $U" | jq -c ".orders[] | select(.id==$ID) | [.status, .driver_phone]"); check "user sees driver phone while accepted" "$R" '\["accepted","09381356747"\]'
+          R=$(curl -s -XPOST $B/api/driver/orders/$ID/deliver -H "Authorization: Bearer $U"); check "user cannot mark delivered" "$R" "دسترسی مجاز نیست"
+          R=$(curl -s -XPOST $B/api/driver/orders/$ID/deliver -H "Authorization: Bearer $D"); check "driver marks delivered" "$R" '"ok":true'
+          R=$(curl -s -XPOST $B/api/driver/orders/$ID/deliver -H "Authorization: Bearer $D"); check "deliver twice rejected" "$R" "قابل ثبت"
+          R=$(curl -s $B/api/orders/mine -H "Authorization: Bearer $U" | jq -c ".orders[] | select(.id==$ID) | [.status, .driver_name, .driver_phone]"); check "driver phone hidden after delivery" "$R" '\["delivered","تست راننده",null\]'
+          R=$(curl -s $B/api/driver/orders -H "Authorization: Bearer $D" | jq -c "[.mine[] | select(.id==$ID) | .status]"); check "driver list shows delivered" "$R" '\["delivered"\]'
+          R=$(curl -s -XPOST $B/api/admin/history -H "$J" -H "Authorization: Bearer $D" -d '{"code":"0000000000"}'); check "admin wrong code rejected" "$R" "کد مدیریت اشتباه"
+          R=$(curl -s -XPOST $B/api/admin/history -H "$J" -H "Authorization: Bearer $U" -d '{"code":"0000000000"}'); check "admin as normal user rejected" "$R" "دسترسی مجاز نیست"
+          R=$(curl -s $B/api/admin/orders); check "old public admin list removed" "$R" "مسیر پیدا نشد"
+          exit $fail
