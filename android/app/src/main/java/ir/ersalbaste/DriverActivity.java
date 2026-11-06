@@ -193,6 +193,12 @@ public class DriverActivity extends Activity {
             top.addView(Ui.chip(this, "delivered".equals(st) ? "تحویل داده شد" : "در حال ارسال", Ui.statusColor(st)));
         }
         c.addView(top);
+        // سفارش تحویل‌شده: اطلاعات سفارش‌دهنده پاک شده (سرور هم دیگر آن را نمی‌فرستد)؛ فقط در بخش مدیریت هست
+        if ("delivered".equals(o.optString("status"))) {
+            c.addView(Ui.text(this, "زمان تحویل: " + Ui.date(o.optLong("delivered_at")), 12, false, Ui.GRAY), Ui.matchWrap(this, 6));
+            c.addView(Ui.text(this, "🔒 اطلاعات فرستنده و گیرنده پس از تحویل حذف شد.", 12, false, Ui.GRAY), Ui.matchWrap(this, 4));
+            return c;
+        }
         c.addView(Ui.text(this, "🟢 مبدا: " + o.optString("sender_address") + extra(o, "sender"), 13, false, Ui.BLACK), Ui.matchWrap(this, 8));
         c.addView(Ui.text(this, "      فرستنده: " + o.optString("sender_name") + " — " + o.optString("sender_phone"), 12, false, Ui.GRAY));
         c.addView(Ui.text(this, "🔴 مقصد: " + o.optString("receiver_address") + extra(o, "receiver"), 13, false, Ui.BLACK), Ui.matchWrap(this, 6));
@@ -227,8 +233,6 @@ public class DriverActivity extends Activity {
                     .setMessage("بسته‌ی سفارش #" + o.optInt("id") + " به گیرنده تحویل داده شد؟")
                     .setPositiveButton("بله، تحویل شد", (d, w) -> decide(o.optInt("id"), "deliver"))
                     .setNegativeButton("خیر", null).show());
-        } else if ("delivered".equals(o.optString("status"))) {
-            c.addView(Ui.text(this, "زمان تحویل: " + Ui.date(o.optLong("delivered_at")), 12, false, Ui.GRAY), Ui.matchWrap(this, 6));
         }
         return c;
     }

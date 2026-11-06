@@ -31,6 +31,7 @@ jobs:
           R=$(curl -s -XPOST $B/api/driver/orders/$ID/deliver -H "Authorization: Bearer $D"); check "deliver twice rejected" "$R" "قابل ثبت"
           R=$(curl -s $B/api/orders/mine -H "Authorization: Bearer $U" | jq -c ".orders[] | select(.id==$ID) | [.status, .driver_name, .driver_phone]"); check "driver phone hidden after delivery" "$R" '\["delivered","تست راننده",null\]'
           R=$(curl -s $B/api/driver/orders -H "Authorization: Bearer $D" | jq -c "[.mine[] | select(.id==$ID) | .status]"); check "driver list shows delivered" "$R" '\["delivered"\]'
+          R=$(curl -s $B/api/driver/orders -H "Authorization: Bearer $D" | jq -c "[.mine[] | select(.id==$ID) | (.sender_name, .sender_phone, .sender_address, .receiver_name, .receiver_phone, .receiver_address, .note, .origin_lat)]"); check "customer info removed from driver after delivery" "$R" '^\[null,null,null,null,null,null,null,null\]$'
           R=$(curl -s -XPOST $B/api/admin/history -H "$J" -H "Authorization: Bearer $D" -d '{"code":"0000000000"}'); check "admin wrong code rejected" "$R" "کد مدیریت اشتباه"
           R=$(curl -s -XPOST $B/api/admin/history -H "$J" -H "Authorization: Bearer $U" -d '{"code":"0000000000"}'); check "admin as normal user rejected" "$R" "دسترسی مجاز نیست"
           R=$(curl -s $B/api/admin/orders); check "old public admin list removed" "$R" "مسیر پیدا نشد"

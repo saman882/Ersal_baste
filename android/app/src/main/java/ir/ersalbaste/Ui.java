@@ -180,6 +180,7 @@ public final class Ui {
             case "pending": return "در انتظار تایید راننده";
             case "accepted": return "تایید شد";
             case "delivered": return "تحویل داده شد";
+            case "expired": return "منقضی شد (تایید نشد)";
             case "rejected": return "لغو توسط راننده";
             case "canceled": return "لغو توسط شما";
             default: return status;

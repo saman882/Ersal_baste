@@ -86,9 +86,11 @@ async function requireUser(req: Request, role?: "user" | "driver") {
   return user as { id: number; phone: string; name: string; role: string };
 }
 
-// حذف سفارش‌های منقضی (بیش از یک ساعت در انتظار)
+// سفارش‌هایی که یک ساعت در انتظار ماندند: از دید راننده و کاربر حذف می‌شوند،
+// ولی با وضعیت expired در پایگاه داده می‌مانند تا در تاریخچه‌ی مدیریت دیده شوند.
 async function deleteExpired() {
-  await db.from("orders").delete().eq("status", "pending").lt("created_at", Date.now() - ORDER_TTL_MS);
+  await db.from("orders").update({ status: "expired" })
+    .eq("status", "pending").lt("created_at", Date.now() - ORDER_TTL_MS);
 }
 
 async function body(req: Request) {
@@ -164,7 +166,7 @@ async function handle(req: Request): Promise<unknown> {
     const u = await requireUser(req, "user");
     await deleteExpired();
     const { data, error } = await db.from("orders").select("*, driver:users!orders_driver_id_fkey(name, phone)")
-      .eq("user_id", u.id).order("id", { ascending: false }).limit(100);
+      .eq("user_id", u.id).neq("status", "expired").order("id", { ascending: false }).limit(100);
     if (error) throw error;
     // بعد از تحویل بسته، شماره‌ی راننده دیگر به کاربر نشان داده نمی‌شود
     // deno-lint-ignore no-explicit-any
@@ -193,7 +195,14 @@ async function handle(req: Request): Promise<unknown> {
       db.from("orders").select("*").eq("driver_id", d.id).in("status", ["accepted", "delivered"]).order("decided_at", { ascending: false }).limit(50),
     ]);
     if (p.error) throw p.error;
-    return { now: Date.now(), ttl: ORDER_TTL_MS, pending: p.data, mine: mine.data || [] };
+    // بعد از تحویل، اطلاعات سفارش‌دهنده (فرستنده، گیرنده، آدرس‌ها، شماره‌ها، توضیحات، مختصات)
+    // دیگر برای راننده فرستاده نمی‌شود؛ این اطلاعات فقط در بخش مدیریت در دسترس است.
+    // deno-lint-ignore no-explicit-any
+    const minimal = (o: any) => o.status !== "delivered" ? o : ({
+      id: o.id, status: o.status, driver_id: o.driver_id,
+      created_at: o.created_at, decided_at: o.decided_at, delivered_at: o.delivered_at,
+    });
+    return { now: Date.now(), ttl: ORDER_TTL_MS, pending: p.data, mine: (mine.data || []).map(minimal) };
   }
 
   // تایید یا لغو راننده: به‌روزرسانی شرطی اتمیک؛ فقط یک راننده موفق می‌شود

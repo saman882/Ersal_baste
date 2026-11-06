@@ -79,17 +79,17 @@ public class AdminActivity extends Activity {
         if (drivers == null) drivers = new JSONArray();
 
         // ---- خلاصه ----
-        int[] n = new int[5];
-        String[] keys = {"pending", "accepted", "delivered", "rejected", "canceled"};
+        int[] n = new int[6];
+        String[] keys = {"pending", "accepted", "delivered", "rejected", "canceled", "expired"};
         for (int i = 0; i < orders.length(); i++) {
             String s = orders.optJSONObject(i).optString("status");
-            for (int k = 0; k < 5; k++) if (keys[k].equals(s)) n[k]++;
+            for (int k = 0; k < 6; k++) if (keys[k].equals(s)) n[k]++;
         }
         LinearLayout sum = Ui.card(this);
         sum.addView(Ui.text(this, "خلاصه", 15, true, Ui.BLACK));
         sum.addView(Ui.text(this, "کل سفرها: " + orders.length() + "   ·   رانندگان: " + drivers.length(), 13, false, Ui.BLACK), Ui.matchWrap(this, 6));
         sum.addView(Ui.text(this, "تحویل‌شده: " + n[2] + "   ·   در حال ارسال: " + n[1] + "   ·   در انتظار: " + n[0], 13, false, Ui.GRAY), Ui.matchWrap(this, 4));
-        sum.addView(Ui.text(this, "لغو راننده: " + n[3] + "   ·   لغو کاربر: " + n[4], 13, false, Ui.GRAY), Ui.matchWrap(this, 4));
+        sum.addView(Ui.text(this, "لغو راننده: " + n[3] + "   ·   لغو کاربر: " + n[4] + "   ·   منقضی: " + n[5], 13, false, Ui.GRAY), Ui.matchWrap(this, 4));
         col.addView(sum, Ui.matchWrap());
 
         // ---- رانندگان ----
@@ -111,7 +111,7 @@ public class AdminActivity extends Activity {
 
         // ---- همه‌ی سفرها ----
         col.addView(Ui.text(this, "همه‌ی سفرها (" + orders.length() + ")", 17, true, Ui.BLACK), Ui.matchWrap(this, 24));
-        col.addView(Ui.text(this, "سفارش‌هایی که در یک ساعت تایید نشدند، طبق قانون برنامه حذف شده‌اند.", 12, false, Ui.GRAY), Ui.matchWrap(this, 4));
+        col.addView(Ui.text(this, "همه‌ی اطلاعات سفرها اینجا می‌ماند؛ حتی سفرهای تحویل‌شده و سفارش‌هایی که در یک ساعت تایید نشدند (منقضی).", 12, false, Ui.GRAY), Ui.matchWrap(this, 4));
         for (int i = 0; i < orders.length(); i++) col.addView(orderCard(orders.optJSONObject(i)), Ui.matchWrap(this, 10));
     }
 
@@ -135,6 +135,8 @@ public class AdminActivity extends Activity {
             line(c, "rejected".equals(st) ? "زمان لغو:" : "زمان تایید:", Ui.date(o.optLong("decided_at")));
         } else if ("canceled".equals(st)) {
             line(c, "زمان لغو:", Ui.date(o.optLong("decided_at")));
+        } else if ("expired".equals(st)) {
+            line(c, "⏳ وضعیت:", "در یک ساعت هیچ راننده‌ای تایید نکرد");
         }
         if ("delivered".equals(st)) line(c, "✅ زمان تحویل:", Ui.date(o.optLong("delivered_at")));
         return c;

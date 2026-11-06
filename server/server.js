@@ -36,7 +36,7 @@ db.exec(`
     user_id          INTEGER NOT NULL REFERENCES users(id),
     driver_id        INTEGER REFERENCES users(id),
     status           TEXT NOT NULL DEFAULT 'pending'
-                     CHECK (status IN ('pending','accepted','delivered','rejected','canceled')),
+                     CHECK (status IN ('pending','accepted','delivered','rejected','canceled','expired')),
     origin_lat REAL NOT NULL, origin_lng REAL NOT NULL,
     dest_lat   REAL NOT NULL, dest_lng   REAL NOT NULL,
     sender_name TEXT NOT NULL, sender_phone TEXT NOT NULL, sender_address TEXT NOT NULL,
@@ -54,10 +54,10 @@ db.exec(`
 // مهاجرت پایگاه داده‌ی قدیمی: اضافه کردن وضعیت delivered و ستون delivered_at
 {
   const def = db.prepare(`SELECT sql FROM sqlite_master WHERE type='table' AND name='orders'`).get();
-  if (def && !def.sql.includes("'delivered'")) {
+  if (def && !def.sql.includes("'expired'")) {
     const cols = db.prepare(`PRAGMA table_info(orders)`).all().map((c) => c.name).join(', ');
     const newSql = def.sql
-      .replace("'pending','accepted','rejected','canceled'", "'pending','accepted','delivered','rejected','canceled'")
+      .replace(/status IN \([^)]*\)/, "status IN ('pending','accepted','delivered','rejected','canceled','expired')")
       .replace(/decided_at\s+INTEGER\s*\)\s*$/, 'decided_at INTEGER, delivered_at INTEGER)')
       .replace('CREATE TABLE orders', 'CREATE TABLE orders_new');
     db.exec(`BEGIN; ${newSql}; INSERT INTO orders_new (${cols}) SELECT ${cols} FROM orders;
@@ -95,11 +95,12 @@ function checkPassword(password, user) {
   return crypto.timingSafeEqual(Buffer.from(hash, 'hex'), Buffer.from(user.pass_hash, 'hex'));
 }
 
-// ---------- ۳) حذف سفارش‌های منقضی (بیش از یک ساعت بدون تایید) ----------
+// ---------- ۳) سفارش‌های منقضی (بیش از یک ساعت بدون تایید) ----------
+// از دید راننده و کاربر حذف می‌شوند، ولی با وضعیت expired برای تاریخچه‌ی مدیریت می‌مانند.
 function deleteExpired() {
-  const r = db.prepare(`DELETE FROM orders WHERE status = 'pending' AND created_at < ?`)
+  const r = db.prepare(`UPDATE orders SET status = 'expired' WHERE status = 'pending' AND created_at < ?`)
               .run(Date.now() - ORDER_TTL_MS);
-  if (r.changes) console.log(`[cleanup] ${r.changes} سفارش منقضی حذف شد`);
+  if (r.changes) console.log(`[cleanup] ${r.changes} سفارش منقضی شد`);
 }
 setInterval(deleteExpired, 30 * 1000);
 
@@ -217,7 +218,7 @@ route('GET', /^\/api\/orders\/mine$/, async (req) => {
   const rows = db.prepare(`SELECT o.*, d.name AS driver_name,
       CASE WHEN o.status = 'delivered' THEN NULL ELSE d.phone END AS driver_phone
       FROM orders o LEFT JOIN users d ON d.id = o.driver_id
-      WHERE o.user_id = ? ORDER BY o.id DESC LIMIT 100`).all(u.id);
+      WHERE o.user_id = ? AND o.status != 'expired' ORDER BY o.id DESC LIMIT 100`).all(u.id);
   return { now: Date.now(), ttl: ORDER_TTL_MS, orders: rows };
 });
 
@@ -235,7 +236,12 @@ route('GET', /^\/api\/driver\/orders$/, async (req) => {
   const d = requireUser(req, 'driver');
   deleteExpired();
   const pending = db.prepare(`SELECT * FROM orders WHERE status='pending' ORDER BY id DESC`).all();
-  const mine = db.prepare(`SELECT * FROM orders WHERE driver_id=? AND status IN ('accepted','delivered') ORDER BY decided_at DESC LIMIT 50`).all(d.id);
+  const mine = db.prepare(`SELECT * FROM orders WHERE driver_id=? AND status IN ('accepted','delivered') ORDER BY decided_at DESC LIMIT 50`).all(d.id)
+    // بعد از تحویل، اطلاعات سفارش‌دهنده دیگر برای راننده فرستاده نمی‌شود (فقط در بخش مدیریت)
+    .map((o) => o.status !== 'delivered' ? o : {
+      id: o.id, status: o.status, driver_id: o.driver_id,
+      created_at: o.created_at, decided_at: o.decided_at, delivered_at: o.delivered_at,
+    });
   return { now: Date.now(), ttl: ORDER_TTL_MS, pending, mine };
 });
 
